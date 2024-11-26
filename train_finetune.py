@@ -96,7 +96,7 @@ def main(config_path):
                                         min_length=min_length,
                                         batch_size=batch_size,
                                         num_workers=2,
-                                        dataset_config={},
+                                        ataset_config={'sr': 24000,'min_length': 50,},
                                         device=device)
 
     val_dataloader = build_dataloader(val_list,
@@ -107,7 +107,7 @@ def main(config_path):
                                       validation=True,
                                       num_workers=0,
                                       device=device,
-                                      dataset_config={})
+                                      ataset_config={'sr': 24000,'min_length': 50,})
     
     # load pretrained ASR model
     ASR_config = config.get('ASR_config', False)

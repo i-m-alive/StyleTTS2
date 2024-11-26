@@ -90,24 +90,31 @@ def main(config_path):
     train_list, val_list = get_data_path_list(train_path, val_path)
     device = 'cuda'
 
-    train_dataloader = build_dataloader(train_list,
-                                        root_path,
-                                        OOD_data=OOD_data,
-                                        min_length=min_length,
-                                        batch_size=batch_size,
-                                        num_workers=2,
-                                        ataset_config={'sr': 24000,'min_length': 50,},
-                                        device=device)
+    train_dataloader = build_dataloader(
+    train_list,
+    root_path,
+    OOD_data=OOD_data,
+    min_length=min_length,
+    batch_size=batch_size,
+    num_workers=2,
+    device=device,
+    collate_config={},
+    dataset_config={}
+    )
 
-    val_dataloader = build_dataloader(val_list,
-                                      root_path,
-                                      OOD_data=OOD_data,
-                                      min_length=min_length,
-                                      batch_size=batch_size,
-                                      validation=True,
-                                      num_workers=0,
-                                      device=device,
-                                      ataset_config={'sr': 24000,'min_length': 50,})
+    val_dataloader = build_dataloader(
+        val_list,
+        root_path,
+        OOD_data=OOD_data,
+        min_length=min_length,
+        batch_size=batch_size,
+        validation=True,
+        num_workers=0,
+        device=device,
+        collate_config={},
+        dataset_config={}
+    )
+
     
     # load pretrained ASR model
     ASR_config = config.get('ASR_config', False)

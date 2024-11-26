@@ -75,7 +75,7 @@ def is_valid_audio(file_path):
 class FilePathDataset(Dataset):
     def __init__(self, data_list, root_path, sr=24000, data_augmentation=False, validation=False, OOD_data="/content/dataset.txt", min_length=50):
         # Initialize the dataset
-        self.data_list = [line.strip().split('|') for line in data_list]
+        self.data_list = [line.strip().split('|') for line in data_list]  # Split by '|'
         self.data_list = [data if len(data) == 3 else (*data, 0) for data in self.data_list]
         self.text_cleaner = TextCleaner()
         self.sr = sr
@@ -85,7 +85,7 @@ class FilePathDataset(Dataset):
         self.max_mel_length = 192
         self.min_length = min_length
 
-        # Read OOD data
+        # Read OOD data (Out-of-Distribution data)
         with open(OOD_data, 'r', encoding='utf-8') as f:
             self.ptexts = [line.split('|')[1] for line in f.readlines() if '.wav' in line.split('|')[0]]
 

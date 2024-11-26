@@ -233,7 +233,7 @@ class Collater(object):
 def build_dataloader(path_list,
                      root_path,
                      validation=False,
-                     OOD_data="Data/OOD_texts.txt",
+                     OOD_data="/content/dataset.txt",
                      min_length=50,
                      batch_size=4,
                      num_workers=1,

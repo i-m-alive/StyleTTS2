@@ -9,6 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchaudio
 import pandas as pd
 import logging
+from soundfile import SoundFile
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ _PUNCTUATION = ';:,.!?¡¿—…"«»“” '
 _LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 _LETTERS_IPA = "ɑɐɒæɓʙβɔɕçɗɖðʤəɘɚɛɜɝɞɟʄɡɠɢʛɦɧħɥʜɨɪʝɭɬɫɮʟɱɯɰŋɳɲɴøɵɸθœɶʘɹɺɾɻʀʁɽʂʃʈʧʉʊʋⱱʌɣɤʍχʎʏʑʐʒʔʡʕʢǀǁǂǃˈˌːˑʼʴʰʱʲʷˠˤ˞↓↑→↗↘'̩'ᵻ"
 SYMBOLS = [_PAD] + list(_PUNCTUATION) + list(_LETTERS) + list(_LETTERS_IPA)
+_SYMBOLS = [_PAD] + list(_PUNCTUATION) + list(_LETTERS) + list(_LETTERS_IPA) + list("0123456789-")
 
 # Create a dictionary of symbols
 SYMBOLS_DICT = {symbol: idx for idx, symbol in enumerate(SYMBOLS)}
@@ -28,7 +30,7 @@ SYMBOLS_DICT = {symbol: idx for idx, symbol in enumerate(SYMBOLS)}
 class TextCleaner:
     def __init__(self):
         self.word_index_dictionary = SYMBOLS_DICT
-    
+
     def __call__(self, text):
         indexes = []
         for char in text:
@@ -61,11 +63,20 @@ def preprocess(wave):
     mel_tensor = (torch.log(1e-5 + mel_tensor.unsqueeze(0)) - mean) / std
     return mel_tensor
 
+# Function to validate audio files
+def is_valid_audio(file_path):
+    try:
+        with SoundFile(file_path) as sf:
+            return True
+    except Exception as e:
+        logger.error(f"Invalid audio file {file_path}: {e}")
+        return False
+
 # Dataset class for loading audio and text data
 class FilePathDataset(Dataset):
     def __init__(self, data_list, root_path, sr=24000, data_augmentation=False, validation=False, OOD_data="/content/dataset.txt", min_length=50):
         # Initialize the dataset
-        self.data_list = [line.strip().split('|') for line in data_list]
+        self.data_list = [line.strip().split('|') for line in data_list]  # Split by '|'
         self.data_list = [data if len(data) == 3 else (*data, 0) for data in self.data_list]
         self.text_cleaner = TextCleaner()
         self.sr = sr
@@ -74,12 +85,15 @@ class FilePathDataset(Dataset):
         self.data_augmentation = data_augmentation and not validation
         self.max_mel_length = 192
         self.min_length = min_length
-        
-        # Read OOD data
+
+        # Read OOD data (Out-of-Distribution data)
         with open(OOD_data, 'r', encoding='utf-8') as f:
             self.ptexts = [line.split('|')[1] for line in f.readlines() if '.wav' in line.split('|')[0]]
-        
+
         self.root_path = root_path
+
+        # Validate all audio files
+        self.data_list = [data for data in self.data_list if is_valid_audio(os.path.join(self.root_path, data[0]))]
 
     def __len__(self):
         return len(self.data_list)
@@ -87,34 +101,34 @@ class FilePathDataset(Dataset):
     def __getitem__(self, idx):
         data = self.data_list[idx]
         path = data[0]
-        
+
         # Load audio and text data
         wave, text_tensor, speaker_id = self._load_tensor(data)
-        
+
         # Convert wave to mel spectrogram
         mel_tensor = preprocess(wave).squeeze()
-        
+
         # Generate reference sample (random speaker data)
         ref_data = self.df[self.df[2] == str(speaker_id)].sample(n=1).iloc[0].tolist()
         ref_mel_tensor, ref_label = self._load_data(ref_data[:3])
-        
+
         # Generate out-of-distribution text
         ps = ""
         while len(ps) < self.min_length:
             rand_idx = np.random.randint(0, len(self.ptexts) - 1)
             ps = self.ptexts[rand_idx]
-        
+
         text = self.text_cleaner(ps)
         text.insert(0, 0)
         text.append(0)
         ref_text = torch.LongTensor(text)
-        
+
         return speaker_id, mel_tensor, text_tensor, ref_text, ref_mel_tensor, ref_label, path, wave
 
     def _load_tensor(self, data):
         wave_path, text, speaker_id = data
         speaker_id = int(speaker_id)
-        
+
         # Load and resample audio if needed
         wave, sr = sf.read(os.path.join(self.root_path, wave_path))
         if wave.shape[-1] == 2:  # Stereo to mono conversion
@@ -122,9 +136,9 @@ class FilePathDataset(Dataset):
         if sr != self.sr:
             wave = librosa.resample(wave, orig_sr=sr, target_sr=self.sr)
             logger.info(f"Resampling {wave_path} from {sr}Hz to {self.sr}Hz")
-        
+
         wave = np.concatenate([np.zeros([5000]), wave, np.zeros([5000])], axis=0)
-        
+
         # Clean text
         text = self.text_cleaner(text)
         text.insert(0, 0)  # Start token
@@ -176,7 +190,7 @@ class Collater:
         ref_labels = torch.zeros((batch_size)).long()
         paths = ['' for _ in range(batch_size)]
         waves = [None for _ in range(batch_size)]
-        
+
         # Batch data
         for bid, (label, mel, text, ref_text, ref_mel, ref_label, path, wave) in enumerate(batch):
             mel_size = mel.size(1)
@@ -202,5 +216,4 @@ def build_dataloader(path_list, root_path, validation=False, OOD_data="/content/
     dataset = FilePathDataset(path_list, root_path, OOD_data=OOD_data, min_length=min_length, validation=validation, **dataset_config)
     collate_fn = Collater(**collate_config)
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=not validation, num_workers=num_workers, drop_last=not validation, collate_fn=collate_fn, pin_memory=(device != 'cpu'))
-    
     return data_loader

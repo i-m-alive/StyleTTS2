@@ -17,10 +17,10 @@ ASR_path: "Utils/ASR/epoch_00080.pth"
 PLBERT_dir: 'Utils/PLBERT/'
 
 data_params:
-  train_data: "Data/train_list.txt"
-  val_data: "Data/val_list.txt"
-  root_path: "/local/LJSpeech-1.1/wavs"
-  OOD_data: "Data/OOD_texts.txt"
+  train_data: "/content/train_list.txt"
+  val_data: "/content/val_list.txt"
+  root_path: "/content/processed_chunks"
+  OOD_data: "/content/dataset.txt"
   min_length: 50 # sample until texts with this size are obtained for OOD texts
 
 preprocess_params:
